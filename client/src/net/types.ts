@@ -59,6 +59,8 @@ export type StationType =
   | 'plate_stack'
   | 'serving'
   | 'trash'
+  | 'obstacle'
+  | 'conveyor'
 
 export interface StationDef {
   id: number
@@ -102,6 +104,8 @@ export interface StationSnapshot {
   id: number
   itemOnStation?: Ingredient
   progress: number
+  beltItem?: HeldItem
+  beltPosition?: number
 }
 
 export interface StateSnapshot {

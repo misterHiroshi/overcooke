@@ -15,6 +15,7 @@ import {
   CUT_DURATION,
   COOK_DURATION,
   BURN_DURATION,
+  BELT_DURATION,
   GAME_DURATION,
   ORDER_TIME_LIMIT,
   ORDER_SPAWN_INTERVAL,
@@ -53,6 +54,9 @@ interface StationRuntime {
   bounds: Rect
   itemOnStation?: Ingredient
   progress: number
+  /** type: 'conveyor' のみ使用 */
+  beltItem?: HeldItem
+  beltPosition: number
 }
 
 interface PlayerRuntime {
@@ -76,6 +80,7 @@ export class GameRoom {
     def,
     bounds: { x: def.x, y: def.y, width: def.width, height: def.height },
     progress: 0,
+    beltPosition: 0,
   }))
 
   private orders: Order[] = []
@@ -141,6 +146,29 @@ export class GameRoom {
       case 'trash':
         player.holding = null
         break
+      case 'conveyor':
+        this.interactConveyor(player, station)
+        break
+      case 'obstacle':
+        break // 障害物: 何も起きない(通り抜けできないだけ)
+    }
+  }
+
+  private interactConveyor(player: PlayerRuntime, station: StationRuntime): void {
+    if (!station.beltItem) {
+      // 空いてる → 持ってる物を乗せる
+      if (player.holding) {
+        station.beltItem = player.holding
+        station.beltPosition = 0
+        player.holding = null
+      }
+      return
+    }
+    // 出口まで到達していて、手が空いていれば受け取れる
+    if (station.beltPosition >= 1 && !player.holding) {
+      player.holding = station.beltItem
+      station.beltItem = undefined
+      station.beltPosition = 0
     }
   }
 
@@ -290,6 +318,15 @@ export class GameRoom {
       }
     }
 
+    // ベルトコンベア: 乗ってる物を自動で出口まで運ぶ
+    for (const station of this.stations) {
+      if (station.def.type !== 'conveyor') continue
+      if (station.beltItem && station.beltPosition < 1) {
+        station.beltPosition += seconds / BELT_DURATION
+        if (station.beltPosition > 1) station.beltPosition = 1
+      }
+    }
+
     this.updateOrders(seconds)
 
     this.gameTimeLeft -= seconds
@@ -311,6 +348,8 @@ export class GameRoom {
     for (const station of this.stations) {
       station.itemOnStation = undefined
       station.progress = 0
+      station.beltItem = undefined
+      station.beltPosition = 0
     }
 
     let i = 0
@@ -392,6 +431,8 @@ export class GameRoom {
         id: s.def.id,
         itemOnStation: s.itemOnStation,
         progress: s.progress,
+        beltItem: s.beltItem,
+        beltPosition: s.beltPosition,
       })),
       orders: this.orders,
       score: this.score,

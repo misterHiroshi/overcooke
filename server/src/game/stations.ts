@@ -19,4 +19,9 @@ export const STATIONS: StationDef[] = [
   { id: 7, type: 'plate_stack', label: '皿置き場', color: 0x90caf9, x: 60, y: 500, width: 80, height: 80 },
   { id: 8, type: 'serving', label: '提供口', color: 0xffd54f, x: 700, y: 500, width: 80, height: 80 },
   { id: 9, type: 'trash', label: 'ゴミ箱', color: 0x616161, x: 380, y: 540, width: 60, height: 60 },
+  // 障害物: 通り抜けできない壁。中央の広場に配置し、移動に一工夫必要にする
+  { id: 10, type: 'obstacle', label: '', color: 0x4e4e58, x: 140, y: 240, width: 50, height: 50 },
+  { id: 11, type: 'obstacle', label: '', color: 0x4e4e58, x: 610, y: 240, width: 50, height: 50 },
+  // ベルトコンベア: 乗せた物を自動で端まで運ぶ。長距離の持ち運びを分担できる
+  { id: 12, type: 'conveyor', label: 'ベルトコンベア', color: 0x546e7a, x: 280, y: 420, width: 280, height: 36 },
 ]

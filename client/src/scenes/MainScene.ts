@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client'
 import { connectToServer } from '../net/socket'
 import {
   type StationDef,
+  type StationSnapshot,
   type StateSnapshot,
   type PlayerInput,
   type PlayerSnapshot,
@@ -171,6 +172,10 @@ export class MainScene extends Phaser.Scene {
         .setOrigin(0, 0.5)
         .setVisible(false)
 
+      if (def.type === 'obstacle') {
+        itemText.setText('🧱') // 障害物は常に同じ見た目(動的更新なし)
+      }
+
       this.stationVisuals.set(def.id, { def, labelText, itemText, barBg, barFill })
     }
   }
@@ -294,6 +299,13 @@ export class MainScene extends Phaser.Scene {
       const visual = this.stationVisuals.get(stationState.id)
       if (!visual) continue
 
+      if (visual.def.type === 'obstacle') continue // 常に固定表示のまま
+
+      if (visual.def.type === 'conveyor') {
+        this.syncConveyor(visual, stationState)
+        continue
+      }
+
       const item = stationState.itemOnStation
       if (!item) {
         visual.itemText.setText('')
@@ -319,6 +331,19 @@ export class MainScene extends Phaser.Scene {
         visual.barFill.width = barWidth * stationState.progress
       }
     }
+  }
+
+  /** ベルトコンベア: 乗ってる物を位置に応じて左右にスライドさせる */
+  private syncConveyor(visual: StationVisual, stationState: StationSnapshot): void {
+    if (!stationState.beltItem) {
+      visual.itemText.setText('')
+      return
+    }
+    const pos = stationState.beltPosition ?? 0
+    const startX = visual.def.x + 24
+    const endX = visual.def.x + visual.def.width - 24
+    visual.itemText.setPosition(startX + (endX - startX) * pos, visual.def.y + visual.def.height / 2)
+    visual.itemText.setText(emojiFor(stationState.beltItem))
   }
 
   private updateHud(state: StateSnapshot): void {

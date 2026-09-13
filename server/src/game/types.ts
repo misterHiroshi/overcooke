@@ -84,6 +84,8 @@ export type StationType =
   | 'plate_stack'
   | 'serving'
   | 'trash'
+  | 'obstacle'
+  | 'conveyor'
 
 export interface StationDef {
   id: number
@@ -130,6 +132,9 @@ export interface StationSnapshot {
   id: number
   itemOnStation?: Ingredient
   progress: number
+  /** type: 'conveyor' の場合のみ。運んでいる物と、ベルト上の位置(0=入口 1=出口) */
+  beltItem?: HeldItem
+  beltPosition?: number
 }
 
 /** サーバーから毎tick送られる状態のスナップショット全体 */
@@ -147,6 +152,8 @@ export const CUT_DURATION = 2
 export const COOK_DURATION = 3
 // 調理完了後、取りに行かず放置するとこの秒数で焦げる
 export const BURN_DURATION = 6
+// ベルトコンベアが端から端まで運ぶのにかかる秒数
+export const BELT_DURATION = 4
 export const GAME_DURATION = 120
 export const ORDER_TIME_LIMIT = 25
 export const ORDER_SPAWN_INTERVAL = 10

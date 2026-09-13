@@ -2,7 +2,7 @@
 // 今はモノレポ構成にしていないため手動で同期している。
 
 export type IngredientKind = 'tomato' | 'lettuce' | 'patty' | 'bun'
-export type IngredientState = 'raw' | 'cut' | 'cooked' | 'ready'
+export type IngredientState = 'raw' | 'cut' | 'cooked' | 'ready' | 'burnt'
 
 export interface Ingredient {
   kind: 'ingredient'
@@ -129,6 +129,7 @@ const INGREDIENT_STATE_LABEL: Record<IngredientState, string> = {
   cut: 'カット済',
   cooked: '調理済',
   ready: '',
+  burnt: '焦げ',
 }
 
 function ingredientLabel(item: Ingredient): string {
@@ -171,13 +172,17 @@ function dishMatchesRecipe(dish: Dish, recipe: Recipe): boolean {
   return true
 }
 
+function ingredientEmoji(item: Ingredient): string {
+  return item.state === 'burnt' ? '🔥' : INGREDIENT_EMOJI[item.ingredientKind]
+}
+
 /** 表示用の絵文字。皿が完成レシピと一致していれば完成品の絵文字を返す */
 export function emojiFor(item: HeldItem): string {
   if (isDish(item)) {
     if (item.items.length === 0) return '🍽️'
     const matched = RECIPES.find((r) => dishMatchesRecipe(item, r))
     if (matched) return RECIPE_EMOJI[matched.id]
-    return item.items.map((i) => INGREDIENT_EMOJI[i.ingredientKind]).join('')
+    return item.items.map(ingredientEmoji).join('')
   }
-  return INGREDIENT_EMOJI[item.ingredientKind]
+  return ingredientEmoji(item)
 }

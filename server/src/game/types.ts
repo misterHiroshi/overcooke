@@ -1,5 +1,5 @@
 export type IngredientKind = 'tomato' | 'lettuce' | 'patty' | 'bun'
-export type IngredientState = 'raw' | 'cut' | 'cooked' | 'ready'
+export type IngredientState = 'raw' | 'cut' | 'cooked' | 'ready' | 'burnt'
 
 /** 食材ごとに必要な下ごしらえ */
 export const INGREDIENT_PREP: Record<IngredientKind, 'cut' | 'cook' | 'none'> = {
@@ -145,6 +145,8 @@ export interface StateSnapshot {
 // ゲーム設定値(client/src/net/types.tsと同じ値)
 export const CUT_DURATION = 2
 export const COOK_DURATION = 3
+// 調理完了後、取りに行かず放置するとこの秒数で焦げる
+export const BURN_DURATION = 6
 export const GAME_DURATION = 120
 export const ORDER_TIME_LIMIT = 25
 export const ORDER_SPAWN_INTERVAL = 10

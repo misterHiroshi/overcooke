@@ -14,6 +14,7 @@ import {
   RECIPES,
   CUT_DURATION,
   COOK_DURATION,
+  BURN_DURATION,
   GAME_DURATION,
   ORDER_TIME_LIMIT,
   ORDER_SPAWN_INTERVAL,
@@ -181,7 +182,10 @@ export class GameRoom {
       return
     }
 
-    const readyItem = station.itemOnStation?.state === doneState ? station.itemOnStation : undefined
+    // 完成品(cut/cooked)はもちろん、焦げてしまった物も取り出せる(捨てるため)
+    const stationState = station.itemOnStation?.state
+    const readyItem =
+      stationState === doneState || stationState === 'burnt' ? station.itemOnStation : undefined
     if (!readyItem) return
 
     // 台に完成品が乗ってる状態で、手が空 → そのまま持つ
@@ -265,15 +269,24 @@ export class GameRoom {
       }
     }
 
-    // コンロ: 自動加熱
+    // コンロ: 自動加熱(焼けた後も取りに行かず放置すると焦げる)
     for (const station of this.stations) {
       if (station.def.type !== 'stove') continue
       const item = station.itemOnStation
-      if (!item || item.state !== 'raw') continue
-      station.progress += seconds / COOK_DURATION
-      if (station.progress >= 1) {
-        item.state = 'cooked'
-        station.progress = 1
+      if (!item) continue
+
+      if (item.state === 'raw') {
+        station.progress += seconds / COOK_DURATION
+        if (station.progress >= 1) {
+          item.state = 'cooked'
+          station.progress = 0 // 焦げるまでの進捗として0から数え直す
+        }
+      } else if (item.state === 'cooked') {
+        station.progress += seconds / BURN_DURATION
+        if (station.progress >= 1) {
+          item.state = 'burnt'
+          station.progress = 1
+        }
       }
     }
 

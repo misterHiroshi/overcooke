@@ -305,9 +305,19 @@ export class MainScene extends Phaser.Scene {
       visual.itemText.setText(emojiFor(item))
 
       const barWidth = visual.def.width - 10
-      visual.barBg.setVisible(true)
-      visual.barFill.setVisible(true)
-      visual.barFill.width = barWidth * stationState.progress
+      if (item.state === 'burnt') {
+        // 焦げたら完全に真っ赤なバーで警告し、それ以上は進行しない
+        visual.barBg.setVisible(true)
+        visual.barFill.setVisible(true)
+        visual.barFill.setFillStyle(0xf44336)
+        visual.barFill.width = barWidth
+      } else {
+        visual.barBg.setVisible(true)
+        visual.barFill.setVisible(true)
+        // 調理完了後(cooked)は焦げるまでのカウントダウンなのでオレンジで警告
+        visual.barFill.setFillStyle(item.state === 'cooked' ? 0xff9800 : 0x4caf50)
+        visual.barFill.width = barWidth * stationState.progress
+      }
     }
   }
 

@@ -19,6 +19,7 @@ interface StationVisual {
 interface PlayerVisual {
   rect: Phaser.GameObjects.Rectangle
   heldItem: Phaser.GameObjects.Rectangle
+  youLabel: Phaser.GameObjects.Text
 }
 
 /**
@@ -209,16 +210,33 @@ export class MainScene extends Phaser.Scene {
       if (!visual) {
         const rect = this.add.rectangle(p.x, p.y, this.playerSize, this.playerSize, p.color)
         const heldItem = this.add.rectangle(p.x, p.y - this.playerSize, 12, 12, 0xffffff).setVisible(false)
-        visual = { rect, heldItem }
+        const youLabel = this.add
+          .text(p.x, p.y - this.playerSize - 14, 'YOU', {
+            fontSize: '12px',
+            color: '#ffff00',
+            fontStyle: 'bold',
+          })
+          .setOrigin(0.5)
+          .setVisible(false)
+        visual = { rect, heldItem, youLabel }
         this.playerVisuals.set(p.id, visual)
       }
+      const isMe = p.id === this.myId
       visual.rect.setPosition(p.x, p.y)
       visual.rect.setFillStyle(p.color)
+      // 自分のキャラだけ白い枠線で強調する
+      if (isMe) {
+        visual.rect.setStrokeStyle(3, 0xffffff, 1)
+      } else {
+        visual.rect.setStrokeStyle()
+      }
       visual.heldItem.setPosition(p.x, p.y - this.playerSize)
       visual.heldItem.setVisible(p.holding !== null)
       if (p.holding) {
         visual.heldItem.setFillStyle(isDish(p.holding) ? 0xffe082 : 0xef5350)
       }
+      visual.youLabel.setPosition(p.x, p.y - this.playerSize - 14)
+      visual.youLabel.setVisible(isMe)
     }
 
     // 切断したプレイヤーの表示を消す
@@ -226,6 +244,7 @@ export class MainScene extends Phaser.Scene {
       if (!seenIds.has(id)) {
         visual.rect.destroy()
         visual.heldItem.destroy()
+        visual.youLabel.destroy()
         this.playerVisuals.delete(id)
       }
     }

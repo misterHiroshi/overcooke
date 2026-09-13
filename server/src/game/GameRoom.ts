@@ -26,10 +26,10 @@ const RESTART_DELAY = 5 // 秒: ゲーム終了後、次のラウンド開始ま
 
 const PLAYER_COLORS = [0x4da6ff, 0xff8a65, 0x81c784, 0xba68c8]
 const SPAWN_POINTS = [
-  { x: 380, y: 300 },
-  { x: 420, y: 300 },
-  { x: 380, y: 340 },
-  { x: 420, y: 340 },
+  { x: 340, y: 280 },
+  { x: 460, y: 280 },
+  { x: 340, y: 360 },
+  { x: 460, y: 360 },
 ]
 
 interface Rect {

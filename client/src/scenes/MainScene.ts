@@ -8,6 +8,16 @@ import {
   CUT_DURATION,
   COOK_DURATION,
 } from '../entities/Item'
+import {
+  type Order,
+  GAME_DURATION,
+  ORDER_TIME_LIMIT,
+  ORDER_SPAWN_INTERVAL,
+  MAX_ORDERS,
+  SCORE_PER_ORDER,
+  TIMEOUT_PENALTY,
+  recipeLabel,
+} from '../entities/Order'
 
 interface StationRuntime {
   def: StationDef
@@ -37,10 +47,19 @@ export class MainScene extends Phaser.Scene {
 
   private stations: StationRuntime[] = []
   private holding: HeldItem | null = null
-  private servedCount = 0
+
+  private score = 0
+  private gameTimeLeft = GAME_DURATION
+  private gameOver = false
+  private orders: Order[] = []
+  private nextOrderId = 1
+  private spawnTimer = ORDER_SPAWN_INTERVAL // ゲーム開始直後にも1つ発生させる
 
   private holdingText!: Phaser.GameObjects.Text
-  private servedText!: Phaser.GameObjects.Text
+  private scoreText!: Phaser.GameObjects.Text
+  private timeText!: Phaser.GameObjects.Text
+  private ordersText!: Phaser.GameObjects.Text
+  private gameOverText!: Phaser.GameObjects.Text
   private heldItemVisual!: Phaser.GameObjects.Rectangle
 
   constructor() {
@@ -60,11 +79,33 @@ export class MainScene extends Phaser.Scene {
       color: '#ffffff',
       backgroundColor: '#000000',
     })
-    this.servedText = this.add.text(10, 36, '', {
+    this.scoreText = this.add.text(10, 36, '', {
       fontSize: '16px',
       color: '#ffffff',
       backgroundColor: '#000000',
     })
+    this.timeText = this.add.text(460, 10, '', {
+      fontSize: '16px',
+      color: '#ffffff',
+      backgroundColor: '#000000',
+    })
+    this.ordersText = this.add.text(460, 36, '', {
+      fontSize: '14px',
+      color: '#ffffff',
+      backgroundColor: '#000000',
+      align: 'left',
+    })
+    this.gameOverText = this.add
+      .text(400, 300, '', {
+        fontSize: '32px',
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        align: 'center',
+        padding: { x: 16, y: 12 },
+      })
+      .setOrigin(0.5)
+      .setVisible(false)
+
     this.updateHud()
 
     this.setupInput()
@@ -124,29 +165,69 @@ export class MainScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     const seconds = delta / 1000
-    const distance = this.moveSpeed * seconds
 
-    let dx = 0
-    let dy = 0
-    if (this.pressedKeys.has('ArrowLeft')) dx -= distance
-    if (this.pressedKeys.has('ArrowRight')) dx += distance
-    if (this.pressedKeys.has('ArrowUp')) dy -= distance
-    if (this.pressedKeys.has('ArrowDown')) dy += distance
+    if (!this.gameOver) {
+      const distance = this.moveSpeed * seconds
 
-    this.moveWithCollision(dx, dy)
-    this.updateHeldItemVisual()
+      let dx = 0
+      let dy = 0
+      if (this.pressedKeys.has('ArrowLeft')) dx -= distance
+      if (this.pressedKeys.has('ArrowRight')) dx += distance
+      if (this.pressedKeys.has('ArrowUp')) dy -= distance
+      if (this.pressedKeys.has('ArrowDown')) dy += distance
 
-    // まな板: Spaceを押している間だけ切る進捗が進む
-    const nearby = this.nearbyStation()
-    if (nearby?.def.type === 'cutting_board' && this.pressedKeys.has('Space')) {
-      this.progressCutting(nearby, seconds)
+      this.moveWithCollision(dx, dy)
+
+      // まな板: Spaceを押している間だけ切る進捗が進む
+      const nearby = this.nearbyStation()
+      if (nearby?.def.type === 'cutting_board' && this.pressedKeys.has('Space')) {
+        this.progressCutting(nearby, seconds)
+      }
+
+      // コンロ: 食材が乗っていれば自動で加熱が進む(キー不要)
+      for (const station of this.stations) {
+        if (station.def.type === 'stove') {
+          this.progressCooking(station, seconds)
+        }
+      }
+
+      this.updateOrders(seconds)
+      this.updateGameTimer(seconds)
     }
 
-    // コンロ: 食材が乗っていれば自動で加熱が進む(キー不要)
-    for (const station of this.stations) {
-      if (station.def.type === 'stove') {
-        this.progressCooking(station, seconds)
-      }
+    this.updateHeldItemVisual()
+    this.updateHud()
+  }
+
+  /** 注文の発生とタイムアウト処理 */
+  private updateOrders(seconds: number): void {
+    this.spawnTimer += seconds
+    if (this.spawnTimer >= ORDER_SPAWN_INTERVAL && this.orders.length < MAX_ORDERS) {
+      this.spawnTimer = 0
+      this.orders.push({
+        id: this.nextOrderId++,
+        recipe: 'tomato',
+        timeLeft: ORDER_TIME_LIMIT,
+        timeLimit: ORDER_TIME_LIMIT,
+      })
+    }
+
+    for (const order of this.orders) {
+      order.timeLeft -= seconds
+    }
+    const expired = this.orders.filter((o) => o.timeLeft <= 0)
+    if (expired.length > 0) {
+      this.orders = this.orders.filter((o) => o.timeLeft > 0)
+      this.score = Math.max(0, this.score - TIMEOUT_PENALTY * expired.length)
+    }
+  }
+
+  private updateGameTimer(seconds: number): void {
+    this.gameTimeLeft -= seconds
+    if (this.gameTimeLeft <= 0) {
+      this.gameTimeLeft = 0
+      this.gameOver = true
+      this.gameOverText.setText(`終了!\nスコア: ${this.score}`).setVisible(true)
     }
   }
 
@@ -192,6 +273,7 @@ export class MainScene extends Phaser.Scene {
 
   /** Spaceキーが押された瞬間の処理(移動/自動進行とは別に1回だけ実行) */
   private tryInteract(): void {
+    if (this.gameOver) return
     const station = this.nearbyStation()
     if (!station) return
 
@@ -215,7 +297,6 @@ export class MainScene extends Phaser.Scene {
         this.holding = null
         break
     }
-    this.updateHud()
   }
 
   private interactIngredient(): void {
@@ -286,10 +367,16 @@ export class MainScene extends Phaser.Scene {
   }
 
   private interactServing(): void {
-    if (this.holding && isDish(this.holding)) {
-      this.holding = null
-      this.servedCount += 1
-    }
+    if (!this.holding || !isDish(this.holding)) return
+
+    const dish = this.holding
+    this.holding = null // 皿は手を離れる(注文とマッチしなくても無駄になる)
+
+    const matchIndex = this.orders.findIndex((o) => o.recipe === dish.item.kind)
+    if (matchIndex === -1) return // マッチする注文が無ければ提供失敗(スコアなし)
+
+    this.orders.splice(matchIndex, 1)
+    this.score += SCORE_PER_ORDER
   }
 
   private refreshStationLabel(station: StationRuntime): void {
@@ -312,6 +399,16 @@ export class MainScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.holdingText.setText(`持ち物: ${this.holding ? labelFor(this.holding) : '(なし)'}`)
-    this.servedText.setText(`提供数: ${this.servedCount}`)
+    this.scoreText.setText(`スコア: ${this.score}`)
+    this.timeText.setText(`残り時間: ${Math.ceil(this.gameTimeLeft)}秒`)
+
+    if (this.orders.length === 0) {
+      this.ordersText.setText('注文: (なし)')
+    } else {
+      const lines = this.orders.map(
+        (o) => `${recipeLabel(o.recipe)} 残り${Math.ceil(o.timeLeft)}秒`,
+      )
+      this.ordersText.setText(['注文:', ...lines].join('\n'))
+    }
   }
 }

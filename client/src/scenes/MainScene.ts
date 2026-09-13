@@ -10,6 +10,7 @@ import {
   type Facing,
   labelFor,
   recipeLabel,
+  recipeIngredientsEmoji,
   emojiFor,
 } from '../net/types'
 
@@ -507,7 +508,10 @@ export class MainScene extends Phaser.Scene {
     if (state.orders.length === 0) {
       this.ordersText.setText('注文: (なし)')
     } else {
-      const lines = state.orders.map((o) => `${recipeLabel(o.recipe)} 残り${Math.ceil(o.timeLeft)}秒`)
+      const lines = state.orders.map(
+        (o) =>
+          `${recipeLabel(o.recipe)} ${recipeIngredientsEmoji(o.recipe)} 残り${Math.ceil(o.timeLeft)}秒`,
+      )
       this.ordersText.setText(['注文:', ...lines].join('\n'))
     }
 

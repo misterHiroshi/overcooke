@@ -121,6 +121,13 @@ export function recipeLabel(id: Recipe['id']): string {
   return RECIPES.find((r) => r.id === id)?.label ?? id
 }
 
+/** そのレシピに必要な食材を絵文字で並べたもの(例: サラダ→"🍅🥬")。注文欄のヒント表示用 */
+export function recipeIngredientsEmoji(id: Recipe['id']): string {
+  const recipe = RECIPES.find((r) => r.id === id)
+  if (!recipe) return ''
+  return recipe.requires.map((req) => INGREDIENT_EMOJI[req.ingredientKind]).join('')
+}
+
 const INGREDIENT_KIND_LABEL: Record<IngredientKind, string> = {
   tomato: 'トマト',
   lettuce: 'レタス',

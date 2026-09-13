@@ -1,19 +1,80 @@
-export type IngredientState = 'raw' | 'cut' | 'cooked'
+export type IngredientKind = 'tomato' | 'lettuce' | 'patty' | 'bun'
+export type IngredientState = 'raw' | 'cut' | 'cooked' | 'ready'
+
+/** 食材ごとに必要な下ごしらえ */
+export const INGREDIENT_PREP: Record<IngredientKind, 'cut' | 'cook' | 'none'> = {
+  tomato: 'cut',
+  lettuce: 'cut',
+  patty: 'cook',
+  bun: 'none',
+}
 
 export interface Ingredient {
-  kind: 'tomato'
+  kind: 'ingredient'
+  ingredientKind: IngredientKind
   state: IngredientState
 }
 
 export interface Dish {
   kind: 'plate'
-  item: Ingredient
+  items: Ingredient[]
 }
 
 export type HeldItem = Ingredient | Dish
 
 export function isDish(item: HeldItem): item is Dish {
   return item.kind === 'plate'
+}
+
+export interface RecipeRequirement {
+  ingredientKind: IngredientKind
+  state: IngredientState
+}
+
+export interface Recipe {
+  id: 'salad' | 'hamburger'
+  label: string
+  requires: RecipeRequirement[]
+}
+
+export const RECIPES: Recipe[] = [
+  {
+    id: 'salad',
+    label: 'サラダ',
+    requires: [
+      { ingredientKind: 'tomato', state: 'cut' },
+      { ingredientKind: 'lettuce', state: 'cut' },
+    ],
+  },
+  {
+    id: 'hamburger',
+    label: 'ハンバーガー',
+    requires: [
+      { ingredientKind: 'bun', state: 'ready' },
+      { ingredientKind: 'patty', state: 'cooked' },
+      { ingredientKind: 'tomato', state: 'cut' },
+    ],
+  },
+]
+
+export function findRecipe(id: Recipe['id']): Recipe {
+  const recipe = RECIPES.find((r) => r.id === id)
+  if (!recipe) throw new Error(`unknown recipe: ${id}`)
+  return recipe
+}
+
+/** 皿の中身が指定レシピの要求と過不足なく一致するか */
+export function dishMatchesRecipe(dish: Dish, recipe: Recipe): boolean {
+  if (dish.items.length !== recipe.requires.length) return false
+  const remaining = [...dish.items]
+  for (const req of recipe.requires) {
+    const idx = remaining.findIndex(
+      (item) => item.ingredientKind === req.ingredientKind && item.state === req.state,
+    )
+    if (idx === -1) return false
+    remaining.splice(idx, 1)
+  }
+  return true
 }
 
 export type StationType =
@@ -33,14 +94,18 @@ export interface StationDef {
   y: number
   width: number
   height: number
+  /** type: 'ingredient' の場合のみ。どの食材を出すか */
+  ingredientKind?: IngredientKind
 }
 
 export interface Order {
   id: number
-  recipe: Ingredient['kind']
+  recipe: Recipe['id']
   timeLeft: number
   timeLimit: number
 }
+
+export type Facing = 'up' | 'down' | 'left' | 'right'
 
 export interface PlayerInput {
   left: boolean
@@ -49,8 +114,6 @@ export interface PlayerInput {
   down: boolean
   space: boolean
 }
-
-export type Facing = 'up' | 'down' | 'left' | 'right'
 
 /** クライアントに送るプレイヤーの状態(見た目に必要な分だけ) */
 export interface PlayerSnapshot {
@@ -79,12 +142,12 @@ export interface StateSnapshot {
   gameOver: boolean
 }
 
-// ゲーム設定値(client/src/entities/Item.ts, Order.tsと同じ値)
+// ゲーム設定値(client/src/net/types.tsと同じ値)
 export const CUT_DURATION = 2
 export const COOK_DURATION = 3
 export const GAME_DURATION = 120
-export const ORDER_TIME_LIMIT = 15
-export const ORDER_SPAWN_INTERVAL = 8
+export const ORDER_TIME_LIMIT = 25
+export const ORDER_SPAWN_INTERVAL = 10
 export const MAX_ORDERS = 4
 export const SCORE_PER_ORDER = 10
 export const TIMEOUT_PENALTY = 1

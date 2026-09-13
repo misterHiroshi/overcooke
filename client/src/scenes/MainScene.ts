@@ -82,12 +82,12 @@ export class MainScene extends Phaser.Scene {
       color: '#ffffff',
       backgroundColor: '#000000',
     })
-    this.timeText = this.add.text(460, 10, '', {
+    this.timeText = this.add.text(10, 140, '', {
       fontSize: '16px',
       color: '#ffffff',
       backgroundColor: '#000000',
     })
-    this.ordersText = this.add.text(460, 36, '', {
+    this.ordersText = this.add.text(10, 166, '', {
       fontSize: '14px',
       color: '#ffffff',
       backgroundColor: '#000000',

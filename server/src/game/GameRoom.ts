@@ -9,6 +9,9 @@ import {
   type StateSnapshot,
   type StationDef,
   isDish,
+  dishMatchesRecipe,
+  INGREDIENT_PREP,
+  RECIPES,
   CUT_DURATION,
   COOK_DURATION,
   GAME_DURATION,
@@ -120,18 +123,16 @@ export class GameRoom {
 
     switch (station.def.type) {
       case 'ingredient':
-        if (!player.holding) player.holding = { kind: 'tomato', state: 'raw' }
+        this.interactIngredientStation(player, station)
         break
       case 'cutting_board':
-        this.interactCuttingBoard(player, station)
+        this.interactPrepStation(player, station, 'cut')
         break
       case 'stove':
-        this.interactStove(player, station)
+        this.interactPrepStation(player, station, 'cook')
         break
       case 'plate_stack':
-        if (player.holding?.kind === 'tomato' && player.holding.state === 'cooked') {
-          player.holding = { kind: 'plate', item: player.holding }
-        }
+        this.interactPlateStack(player)
         break
       case 'serving':
         this.interactServing(player)
@@ -142,10 +143,36 @@ export class GameRoom {
     }
   }
 
-  private interactCuttingBoard(player: PlayerRuntime, station: StationRuntime): void {
+  private interactIngredientStation(player: PlayerRuntime, station: StationRuntime): void {
+    const ingredientKind = station.def.ingredientKind!
+    const prep = INGREDIENT_PREP[ingredientKind]
+
+    if (!player.holding) {
+      // 手が空 → 新しく取る(下ごしらえ不要な食材はそのまま使える状態で)
+      player.holding = { kind: 'ingredient', ingredientKind, state: prep === 'none' ? 'ready' : 'raw' }
+      return
+    }
+
+    // 皿を持っていて、下ごしらえ不要な食材(パン等)ならそのまま皿に追加できる
+    if (isDish(player.holding) && prep === 'none') {
+      player.holding.items.push({ kind: 'ingredient', ingredientKind, state: 'ready' })
+    }
+  }
+
+  /** まな板(cut)とコンロ(cook)で共通の「置く/取る/皿に追加する」処理 */
+  private interactPrepStation(
+    player: PlayerRuntime,
+    station: StationRuntime,
+    prepType: 'cut' | 'cook',
+  ): void {
+    const doneState = prepType === 'cut' ? 'cut' : 'cooked'
+
+    // 手に該当する下ごしらえ前の食材を持っていて、台が空 → 置く
     if (
-      player.holding?.kind === 'tomato' &&
+      player.holding &&
+      !isDish(player.holding) &&
       player.holding.state === 'raw' &&
+      INGREDIENT_PREP[player.holding.ingredientKind] === prepType &&
       !station.itemOnStation
     ) {
       station.itemOnStation = player.holding
@@ -153,28 +180,34 @@ export class GameRoom {
       player.holding = null
       return
     }
-    if (!player.holding && station.itemOnStation?.state === 'cut') {
-      player.holding = station.itemOnStation
+
+    const readyItem = station.itemOnStation?.state === doneState ? station.itemOnStation : undefined
+    if (!readyItem) return
+
+    // 台に完成品が乗ってる状態で、手が空 → そのまま持つ
+    if (!player.holding) {
+      player.holding = readyItem
+      station.itemOnStation = undefined
+      station.progress = 0
+      return
+    }
+
+    // 台に完成品が乗ってる状態で、皿を持っている → 皿に追加する
+    if (isDish(player.holding)) {
+      player.holding.items.push(readyItem)
       station.itemOnStation = undefined
       station.progress = 0
     }
   }
 
-  private interactStove(player: PlayerRuntime, station: StationRuntime): void {
-    if (
-      player.holding?.kind === 'tomato' &&
-      player.holding.state === 'cut' &&
-      !station.itemOnStation
-    ) {
-      station.itemOnStation = player.holding
-      station.progress = 0
-      player.holding = null
+  private interactPlateStack(player: PlayerRuntime): void {
+    if (!player.holding) {
+      player.holding = { kind: 'plate', items: [] }
       return
     }
-    if (!player.holding && station.itemOnStation?.state === 'cooked') {
-      player.holding = station.itemOnStation
-      station.itemOnStation = undefined
-      station.progress = 0
+    // 下ごしらえ済みの単品を持っている → 皿に乗せ替える(単品持ち運びのショートカット)
+    if (!isDish(player.holding) && player.holding.state !== 'raw') {
+      player.holding = { kind: 'plate', items: [player.holding] }
     }
   }
 
@@ -183,10 +216,15 @@ export class GameRoom {
     const dish = player.holding
     player.holding = null
 
-    const matchIndex = this.orders.findIndex((o) => o.recipe === dish.item.kind)
-    if (matchIndex === -1) return
-    this.orders.splice(matchIndex, 1)
-    this.score += SCORE_PER_ORDER
+    for (const recipe of RECIPES) {
+      if (!dishMatchesRecipe(dish, recipe)) continue
+      const matchIndex = this.orders.findIndex((o) => o.recipe === recipe.id)
+      if (matchIndex === -1) continue
+      this.orders.splice(matchIndex, 1)
+      this.score += SCORE_PER_ORDER
+      return
+    }
+    // どの注文にもマッチしなければ皿は無駄になる(スコアなし)
   }
 
   private nearbyStation(player: PlayerRuntime): StationRuntime | undefined {
@@ -231,7 +269,7 @@ export class GameRoom {
     for (const station of this.stations) {
       if (station.def.type !== 'stove') continue
       const item = station.itemOnStation
-      if (!item || item.state !== 'cut') continue
+      if (!item || item.state !== 'raw') continue
       station.progress += seconds / COOK_DURATION
       if (station.progress >= 1) {
         item.state = 'cooked'
@@ -303,9 +341,10 @@ export class GameRoom {
     this.spawnTimer += seconds
     if (this.spawnTimer >= ORDER_SPAWN_INTERVAL && this.orders.length < MAX_ORDERS) {
       this.spawnTimer = 0
+      const recipe = RECIPES[Math.floor(Math.random() * RECIPES.length)]
       this.orders.push({
         id: this.nextOrderId++,
-        recipe: 'tomato',
+        recipe: recipe.id,
         timeLeft: ORDER_TIME_LIMIT,
         timeLimit: ORDER_TIME_LIMIT,
       })

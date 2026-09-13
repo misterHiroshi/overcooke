@@ -57,6 +57,8 @@ interface StationRuntime {
   /** type: 'conveyor' のみ使用 */
   beltItem?: HeldItem
   beltPosition: number
+  /** type: 'counter' のみ使用 */
+  counterItem?: HeldItem
 }
 
 interface PlayerRuntime {
@@ -151,7 +153,45 @@ export class GameRoom {
         break
       case 'obstacle':
         break // 障害物: 何も起きない(通り抜けできないだけ)
+      case 'counter':
+        this.interactCounter(player, station)
+        break
     }
+  }
+
+  private interactCounter(player: PlayerRuntime, station: StationRuntime): void {
+    // 皿を持っていて、カウンターに使える食材が乗っている → 皿に追加
+    if (
+      player.holding &&
+      isDish(player.holding) &&
+      station.counterItem &&
+      !isDish(station.counterItem)
+    ) {
+      player.holding.items.push(station.counterItem)
+      station.counterItem = undefined
+      return
+    }
+
+    if (!station.counterItem) {
+      // カウンターが空 → 持ってる物を置く
+      if (player.holding) {
+        station.counterItem = player.holding
+        player.holding = null
+      }
+      return
+    }
+
+    if (!player.holding) {
+      // カウンターに何か乗ってて手が空 → そのまま取る
+      player.holding = station.counterItem
+      station.counterItem = undefined
+      return
+    }
+
+    // 両方埋まってる → 入れ替える
+    const tmp = station.counterItem
+    station.counterItem = player.holding
+    player.holding = tmp
   }
 
   private interactConveyor(player: PlayerRuntime, station: StationRuntime): void {
@@ -350,6 +390,7 @@ export class GameRoom {
       station.progress = 0
       station.beltItem = undefined
       station.beltPosition = 0
+      station.counterItem = undefined
     }
 
     let i = 0
@@ -433,6 +474,7 @@ export class GameRoom {
         progress: s.progress,
         beltItem: s.beltItem,
         beltPosition: s.beltPosition,
+        counterItem: s.counterItem,
       })),
       orders: this.orders,
       score: this.score,

@@ -61,6 +61,7 @@ export type StationType =
   | 'trash'
   | 'obstacle'
   | 'conveyor'
+  | 'counter'
 
 export interface StationDef {
   id: number
@@ -106,6 +107,7 @@ export interface StationSnapshot {
   progress: number
   beltItem?: HeldItem
   beltPosition?: number
+  counterItem?: HeldItem
 }
 
 export interface StateSnapshot {
@@ -193,7 +195,8 @@ export function emojiFor(item: HeldItem): string {
     if (item.items.length === 0) return '🍽️'
     const matched = RECIPES.find((r) => dishMatchesRecipe(item, r))
     if (matched) return RECIPE_EMOJI[matched.id]
-    return item.items.map(ingredientEmoji).join('')
+    // 完成前は🍽️を付けて「皿に乗ってる途中」だと分かるようにする
+    return '🍽️' + item.items.map(ingredientEmoji).join('')
   }
   return ingredientEmoji(item)
 }

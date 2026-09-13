@@ -86,6 +86,7 @@ export type StationType =
   | 'trash'
   | 'obstacle'
   | 'conveyor'
+  | 'counter'
 
 export interface StationDef {
   id: number
@@ -135,6 +136,8 @@ export interface StationSnapshot {
   /** type: 'conveyor' の場合のみ。運んでいる物と、ベルト上の位置(0=入口 1=出口) */
   beltItem?: HeldItem
   beltPosition?: number
+  /** type: 'counter' の場合のみ。置かれている物(食材でも皿でも何でも) */
+  counterItem?: HeldItem
 }
 
 /** サーバーから毎tick送られる状態のスナップショット全体 */

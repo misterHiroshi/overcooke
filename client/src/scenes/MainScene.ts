@@ -130,6 +130,7 @@ export class MainScene extends Phaser.Scene {
       fontSize: '14px',
       color: '#ffffff',
       backgroundColor: '#000000',
+      lineSpacing: 10, // 絵文字は行の高さがテキストより大きく、詰めると重なるため広めに
     })
     this.gameOverText = this.add
       .text(400, 300, '', {
@@ -434,6 +435,11 @@ export class MainScene extends Phaser.Scene {
         continue
       }
 
+      if (visual.def.type === 'counter') {
+        this.syncCounter(visual, stationState)
+        continue
+      }
+
       const item = stationState.itemOnStation
       if (!item) {
         visual.itemBg.setVisible(false)
@@ -470,6 +476,25 @@ export class MainScene extends Phaser.Scene {
         visual.barFill.width = barWidth * stationState.progress
       }
     }
+  }
+
+  /** カウンター: 置かれてる物をそのまま真ん中に表示するだけ */
+  private syncCounter(visual: StationVisual, stationState: StationSnapshot): void {
+    if (!stationState.counterItem) {
+      visual.itemBg.setVisible(false)
+      visual.itemText.setText('')
+      visual.lastFingerprint = ''
+      return
+    }
+    visual.itemBg.setVisible(true)
+    visual.itemText.setText(emojiFor(stationState.counterItem))
+
+    const fingerprint = JSON.stringify(stationState.counterItem)
+    if (fingerprint !== visual.lastFingerprint) {
+      popTween(this, visual.itemText)
+      popTween(this, visual.itemBg)
+    }
+    visual.lastFingerprint = fingerprint
   }
 
   /** ベルトコンベア: 乗ってる物を位置に応じて左右にスライドさせる */

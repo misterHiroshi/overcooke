@@ -24,4 +24,9 @@ export const STATIONS: StationDef[] = [
   { id: 11, type: 'obstacle', label: '', color: 0x4e4e58, x: 610, y: 240, width: 50, height: 50 },
   // ベルトコンベア: 乗せた物を自動で端まで運ぶ。長距離の持ち運びを分担できる
   { id: 12, type: 'conveyor', label: 'ベルトコンベア', color: 0x546e7a, x: 280, y: 420, width: 280, height: 36 },
+  // カウンター: 何でも一時的に置ける作業台。手を空けたい時や、焦げる前に
+  // コンロから避難させたい時などに使う
+  { id: 13, type: 'counter', label: 'カウンター', color: 0x7c8b94, x: 20, y: 350, width: 60, height: 40 },
+  { id: 14, type: 'counter', label: 'カウンター', color: 0x7c8b94, x: 720, y: 160, width: 60, height: 40 },
+  { id: 15, type: 'counter', label: 'カウンター', color: 0x7c8b94, x: 200, y: 380, width: 60, height: 40 },
 ]

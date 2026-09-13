@@ -27,18 +27,52 @@ function heldItemOffset(facing: Facing, distance: number): { dx: number; dy: num
   }
 }
 
+/** 向きを角度(度)に変換。三角形の矢印マーカーの回転に使う */
+function facingAngle(facing: Facing): number {
+  switch (facing) {
+    case 'up':
+      return 0
+    case 'right':
+      return 90
+    case 'down':
+      return 180
+    case 'left':
+      return 270
+  }
+}
+
+/** ちょっとした「変化した感」を出す拡大縮小ポップ演出 */
+function popTween(scene: Phaser.Scene, target: Phaser.GameObjects.GameObject): void {
+  scene.tweens.add({
+    targets: target,
+    scale: { from: 0.3, to: 1 },
+    duration: 220,
+    ease: 'Back.out',
+  })
+}
+
 interface StationVisual {
   def: StationDef
   labelText: Phaser.GameObjects.Text
+  itemBg: Phaser.GameObjects.Arc
   itemText: Phaser.GameObjects.Text
   barBg: Phaser.GameObjects.Rectangle
   barFill: Phaser.GameObjects.Rectangle
+  /** 直前フレームでの表示内容(変化検知用の指紋) */
+  lastFingerprint: string
 }
 
 interface PlayerVisual {
-  rect: Phaser.GameObjects.Rectangle
+  sprite: Phaser.GameObjects.Sprite
+  meRing: Phaser.GameObjects.Arc
+  facingArrow: Phaser.GameObjects.Triangle
+  heldItemBg: Phaser.GameObjects.Arc
   heldItem: Phaser.GameObjects.Text
   youLabel: Phaser.GameObjects.Text
+  lastX: number
+  lastY: number
+  walkTime: number
+  lastHoldingFingerprint: string
 }
 
 /**
@@ -140,6 +174,41 @@ export class MainScene extends Phaser.Scene {
     })
   }
 
+  /**
+   * 色ごとに簡易ドット絵風シェフキャラのテクスチャを1回だけ生成してキャッシュする。
+   * (帽子をかぶった小さいキャラ。目は正面固定、向きは別途矢印マーカーで示す)
+   */
+  private ensureChefTexture(color: number): string {
+    const key = `chef_${color}`
+    if (this.textures.exists(key)) return key
+
+    const w = 30
+    const h = 36
+    const g = this.add.graphics()
+
+    // 体(角丸の四角)
+    g.fillStyle(color, 1)
+    g.fillRoundedRect(4, 15, w - 8, h - 17, 5)
+    // 首元の影
+    g.fillStyle(0x000000, 0.15)
+    g.fillRect(4, 15, w - 8, 3)
+    // 頭
+    g.fillStyle(0xffe0b2, 1)
+    g.fillCircle(w / 2, 13, 10)
+    // シェフハット
+    g.fillStyle(0xffffff, 1)
+    g.fillRoundedRect(w / 2 - 8, 0, 16, 9, 4)
+    g.fillRect(w / 2 - 10, 7, 20, 4)
+    // 目
+    g.fillStyle(0x1a1a1a, 1)
+    g.fillCircle(w / 2 - 3.5, 13, 1.5)
+    g.fillCircle(w / 2 + 3.5, 13, 1.5)
+
+    g.generateTexture(key, w, h)
+    g.destroy()
+    return key
+  }
+
   private createStationVisuals(stations: StationDef[]): void {
     for (const def of stations) {
       const centerX = def.x + def.width / 2
@@ -157,10 +226,9 @@ export class MainScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
 
-      // 乗ってる食材の絵文字(箱の中央、大きめ)
-      const itemText = this.add
-        .text(centerX, centerY, '', { fontSize: '28px' })
-        .setOrigin(0.5)
+      // 乗ってる食材の絵文字+ 見やすくするための丸皿風の背景
+      const itemBg = this.add.circle(centerX, centerY, 20, 0xffffff, 0.85).setVisible(false)
+      const itemText = this.add.text(centerX, centerY, '', { fontSize: '30px' }).setOrigin(0.5)
 
       // 下ごしらえ進捗バー(箱のすぐ下)
       const barWidth = def.width - 10
@@ -176,7 +244,15 @@ export class MainScene extends Phaser.Scene {
         itemText.setText('🧱') // 障害物は常に同じ見た目(動的更新なし)
       }
 
-      this.stationVisuals.set(def.id, { def, labelText, itemText, barBg, barFill })
+      this.stationVisuals.set(def.id, {
+        def,
+        labelText,
+        itemBg,
+        itemText,
+        barBg,
+        barFill,
+        lastFingerprint: '',
+      })
     }
   }
 
@@ -226,67 +302,118 @@ export class MainScene extends Phaser.Scene {
     })
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
     if (!this.latestState) return
-    this.renderState(this.latestState)
+    this.renderState(this.latestState, delta / 1000)
   }
 
-  private renderState(state: StateSnapshot): void {
-    this.syncPlayers(state.players)
+  private renderState(state: StateSnapshot, deltaSeconds: number): void {
+    this.syncPlayers(state.players, deltaSeconds)
     this.syncStationLabels(state)
     this.updateHud(state)
   }
 
-  private syncPlayers(players: PlayerSnapshot[]): void {
+  private syncPlayers(players: PlayerSnapshot[], deltaSeconds: number): void {
     const seenIds = new Set<string>()
 
     for (const p of players) {
       seenIds.add(p.id)
       let visual = this.playerVisuals.get(p.id)
       if (!visual) {
-        const rect = this.add.rectangle(p.x, p.y, this.playerSize, this.playerSize, p.color)
+        const textureKey = this.ensureChefTexture(p.color)
+        const sprite = this.add.sprite(p.x, p.y, textureKey)
+        const meRing = this.add
+          .circle(p.x, p.y, this.playerSize / 2 + 5)
+          .setStrokeStyle(3, 0xffffff, 1)
+          .setVisible(false)
+        const facingArrow = this.add
+          .triangle(p.x, p.y, 0, -6, -5, 5, 5, 5, 0xffeb3b)
+          .setOrigin(0.5)
         const initialOffset = heldItemOffset(p.facing, this.playerSize)
+        const heldItemBg = this.add
+          .circle(p.x + initialOffset.dx, p.y + initialOffset.dy, 16, 0xffffff, 0.85)
+          .setVisible(false)
         const heldItem = this.add
-          .text(p.x + initialOffset.dx, p.y + initialOffset.dy, '', {
-            fontSize: '22px',
-            backgroundColor: 'rgba(0,0,0,0.35)',
-          })
+          .text(p.x + initialOffset.dx, p.y + initialOffset.dy, '', { fontSize: '22px' })
           .setOrigin(0.5)
           .setVisible(false)
         const youLabel = this.add
-          .text(p.x, p.y - this.playerSize - 14, 'YOU', {
+          .text(p.x, p.y - this.playerSize - 18, 'YOU', {
             fontSize: '12px',
             color: '#ffff00',
             fontStyle: 'bold',
           })
           .setOrigin(0.5)
           .setVisible(false)
-        visual = { rect, heldItem, youLabel }
+        visual = {
+          sprite,
+          meRing,
+          facingArrow,
+          heldItemBg,
+          heldItem,
+          youLabel,
+          lastX: p.x,
+          lastY: p.y,
+          walkTime: 0,
+          lastHoldingFingerprint: '',
+        }
         this.playerVisuals.set(p.id, visual)
       }
+
       const isMe = p.id === this.myId
-      visual.rect.setPosition(p.x, p.y)
-      visual.rect.setFillStyle(p.color)
-      // 自分のキャラだけ白い枠線で強調する
-      if (isMe) {
-        visual.rect.setStrokeStyle(3, 0xffffff, 1)
+      const moved = Math.hypot(p.x - visual.lastX, p.y - visual.lastY) > 0.5
+      visual.lastX = p.x
+      visual.lastY = p.y
+
+      // 歩行アニメ: 動いてる間だけプルプルと上下+左右にスケールが揺れる
+      if (moved) {
+        visual.walkTime += deltaSeconds * 14
+        const wobble = Math.sin(visual.walkTime)
+        visual.sprite.setScale(1 - wobble * 0.05, 1 + wobble * 0.05)
       } else {
-        visual.rect.setStrokeStyle()
+        visual.walkTime = 0
+        visual.sprite.setScale(1, 1)
       }
+
+      visual.sprite.setPosition(p.x, p.y)
+      visual.meRing.setPosition(p.x, p.y)
+      visual.meRing.setVisible(isMe)
+
+      // 向き矢印: キャラの外周に、向いてる方向へ向けて表示
+      const arrowOffset = heldItemOffset(p.facing, this.playerSize / 2 + 8)
+      visual.facingArrow.setPosition(p.x + arrowOffset.dx, p.y + arrowOffset.dy)
+      visual.facingArrow.setAngle(facingAngle(p.facing))
+
       const offset = heldItemOffset(p.facing, this.playerSize)
+      visual.heldItemBg.setPosition(p.x + offset.dx, p.y + offset.dy)
       visual.heldItem.setPosition(p.x + offset.dx, p.y + offset.dy)
-      visual.heldItem.setVisible(p.holding !== null)
+      const hasItem = p.holding !== null
+      visual.heldItemBg.setVisible(hasItem)
+      visual.heldItem.setVisible(hasItem)
       if (p.holding) {
         visual.heldItem.setText(emojiFor(p.holding))
+        // 何か持った/持ち物が変わった瞬間だけポンと拡大するアニメで気づきやすく
+        const fingerprint = JSON.stringify(p.holding)
+        if (fingerprint !== visual.lastHoldingFingerprint) {
+          popTween(this, visual.heldItem)
+          popTween(this, visual.heldItemBg)
+        }
+        visual.lastHoldingFingerprint = fingerprint
+      } else {
+        visual.lastHoldingFingerprint = ''
       }
-      visual.youLabel.setPosition(p.x, p.y - this.playerSize - 14)
+
+      visual.youLabel.setPosition(p.x, p.y - this.playerSize - 18)
       visual.youLabel.setVisible(isMe)
     }
 
     // 切断したプレイヤーの表示を消す
     for (const [id, visual] of this.playerVisuals) {
       if (!seenIds.has(id)) {
-        visual.rect.destroy()
+        visual.sprite.destroy()
+        visual.meRing.destroy()
+        visual.facingArrow.destroy()
+        visual.heldItemBg.destroy()
         visual.heldItem.destroy()
         visual.youLabel.destroy()
         this.playerVisuals.delete(id)
@@ -308,13 +435,24 @@ export class MainScene extends Phaser.Scene {
 
       const item = stationState.itemOnStation
       if (!item) {
+        visual.itemBg.setVisible(false)
         visual.itemText.setText('')
         visual.barBg.setVisible(false)
         visual.barFill.setVisible(false)
+        visual.lastFingerprint = ''
         continue
       }
 
+      visual.itemBg.setVisible(true)
       visual.itemText.setText(emojiFor(item))
+
+      // 食材が新しく置かれた/状態が変わった瞬間だけポンと拡大アニメ
+      const fingerprint = `${item.ingredientKind}:${item.state}`
+      if (fingerprint !== visual.lastFingerprint) {
+        popTween(this, visual.itemText)
+        popTween(this, visual.itemBg)
+      }
+      visual.lastFingerprint = fingerprint
 
       const barWidth = visual.def.width - 10
       if (item.state === 'burnt') {
@@ -336,14 +474,28 @@ export class MainScene extends Phaser.Scene {
   /** ベルトコンベア: 乗ってる物を位置に応じて左右にスライドさせる */
   private syncConveyor(visual: StationVisual, stationState: StationSnapshot): void {
     if (!stationState.beltItem) {
+      visual.itemBg.setVisible(false)
       visual.itemText.setText('')
+      visual.lastFingerprint = ''
       return
     }
     const pos = stationState.beltPosition ?? 0
     const startX = visual.def.x + 24
     const endX = visual.def.x + visual.def.width - 24
-    visual.itemText.setPosition(startX + (endX - startX) * pos, visual.def.y + visual.def.height / 2)
+    const x = startX + (endX - startX) * pos
+    const y = visual.def.y + visual.def.height / 2
+    visual.itemBg.setPosition(x, y)
+    visual.itemBg.setVisible(true)
+    visual.itemText.setPosition(x, y)
     visual.itemText.setText(emojiFor(stationState.beltItem))
+
+    const fingerprint = JSON.stringify(stationState.beltItem)
+    if (fingerprint !== visual.lastFingerprint && pos < 0.05) {
+      // ベルトに乗せた瞬間だけポップ(毎フレーム動くので位置基準では出さない)
+      popTween(this, visual.itemText)
+      popTween(this, visual.itemBg)
+    }
+    visual.lastFingerprint = fingerprint
   }
 
   private updateHud(state: StateSnapshot): void {

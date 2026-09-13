@@ -6,10 +6,25 @@ import {
   type StateSnapshot,
   type PlayerInput,
   type PlayerSnapshot,
+  type Facing,
   isDish,
   labelFor,
   recipeLabel,
 } from '../net/types'
+
+/** 向きに応じて、持ち物アイコンをキャラのどちら側にずらすかを返す */
+function heldItemOffset(facing: Facing, distance: number): { dx: number; dy: number } {
+  switch (facing) {
+    case 'up':
+      return { dx: 0, dy: -distance }
+    case 'down':
+      return { dx: 0, dy: distance }
+    case 'left':
+      return { dx: -distance, dy: 0 }
+    case 'right':
+      return { dx: distance, dy: 0 }
+  }
+}
 
 interface StationVisual {
   def: StationDef
@@ -209,7 +224,10 @@ export class MainScene extends Phaser.Scene {
       let visual = this.playerVisuals.get(p.id)
       if (!visual) {
         const rect = this.add.rectangle(p.x, p.y, this.playerSize, this.playerSize, p.color)
-        const heldItem = this.add.rectangle(p.x, p.y - this.playerSize, 12, 12, 0xffffff).setVisible(false)
+        const initialOffset = heldItemOffset(p.facing, this.playerSize)
+        const heldItem = this.add
+          .rectangle(p.x + initialOffset.dx, p.y + initialOffset.dy, 12, 12, 0xffffff)
+          .setVisible(false)
         const youLabel = this.add
           .text(p.x, p.y - this.playerSize - 14, 'YOU', {
             fontSize: '12px',
@@ -230,7 +248,8 @@ export class MainScene extends Phaser.Scene {
       } else {
         visual.rect.setStrokeStyle()
       }
-      visual.heldItem.setPosition(p.x, p.y - this.playerSize)
+      const offset = heldItemOffset(p.facing, this.playerSize)
+      visual.heldItem.setPosition(p.x + offset.dx, p.y + offset.dy)
       visual.heldItem.setVisible(p.holding !== null)
       if (p.holding) {
         visual.heldItem.setFillStyle(isDish(p.holding) ? 0xffe082 : 0xef5350)

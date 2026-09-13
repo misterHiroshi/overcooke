@@ -53,12 +53,15 @@ export interface PlayerInput {
   space: boolean
 }
 
+export type Facing = 'up' | 'down' | 'left' | 'right'
+
 export interface PlayerSnapshot {
   id: string
   x: number
   y: number
   color: number
   holding: HeldItem | null
+  facing: Facing
 }
 
 export interface StationSnapshot {

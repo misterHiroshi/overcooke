@@ -1,5 +1,6 @@
 import { STATIONS } from './stations'
 import {
+  type Facing,
   type HeldItem,
   type Ingredient,
   type Order,
@@ -57,6 +58,7 @@ interface PlayerRuntime {
   color: number
   holding: HeldItem | null
   input: PlayerInput
+  facing: Facing
 }
 
 /**
@@ -94,6 +96,7 @@ export class GameRoom {
       color,
       holding: null,
       input: { left: false, right: false, up: false, down: false, space: false },
+      facing: 'down',
     })
   }
 
@@ -278,6 +281,12 @@ export class GameRoom {
     if (player.input.up) dy -= distance
     if (player.input.down) dy += distance
 
+    // 向き(facing)は最後に押された方向のキーで更新する(持ち物の表示位置に使う)
+    if (player.input.left) player.facing = 'left'
+    else if (player.input.right) player.facing = 'right'
+    else if (player.input.up) player.facing = 'up'
+    else if (player.input.down) player.facing = 'down'
+
     const half = PLAYER_SIZE / 2
 
     if (dx !== 0) {
@@ -322,6 +331,7 @@ export class GameRoom {
       y: p.y,
       color: p.color,
       holding: p.holding,
+      facing: p.facing,
     }))
 
     return {

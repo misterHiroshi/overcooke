@@ -50,6 +50,8 @@ export interface PlayerInput {
   space: boolean
 }
 
+export type Facing = 'up' | 'down' | 'left' | 'right'
+
 /** クライアントに送るプレイヤーの状態(見た目に必要な分だけ) */
 export interface PlayerSnapshot {
   id: string
@@ -57,6 +59,7 @@ export interface PlayerSnapshot {
   y: number
   color: number
   holding: HeldItem | null
+  facing: Facing
 }
 
 /** クライアントに送る設備の動的な状態(位置等の静的情報はinitで別送済み) */

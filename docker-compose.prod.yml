@@ -1,0 +1,35 @@
+services:
+  server:
+    build:
+      context: ./server
+    restart: always
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.overcooke-auth.basicauth.users=game:$$2y$$05$$MZnYNjLMfw02cTmWP1Ut2e/95RySxrnW7FRHYKOisFHYEp4zhU5AG"
+      - "traefik.http.routers.overcooke-api.rule=Host(`overcooke.togeari.cloud`) && PathPrefix(`/socket.io`)"
+      - "traefik.http.routers.overcooke-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.overcooke-api.middlewares=overcooke-auth"
+      - "traefik.http.routers.overcooke-api.service=overcooke-api"
+      - "traefik.http.services.overcooke-api.loadbalancer.server.port=3001"
+
+  client:
+    build:
+      context: ./client
+    restart: always
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.overcooke-auth.basicauth.users=game:$$2y$$05$$MZnYNjLMfw02cTmWP1Ut2e/95RySxrnW7FRHYKOisFHYEp4zhU5AG"
+      - "traefik.http.routers.overcooke-client.rule=Host(`overcooke.togeari.cloud`)"
+      - "traefik.http.routers.overcooke-client.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.overcooke-client.middlewares=overcooke-auth"
+      - "traefik.http.services.overcooke-client.loadbalancer.server.port=80"
+    depends_on:
+      - server
+
+networks:
+  proxy-network:
+    external: true

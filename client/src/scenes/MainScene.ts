@@ -72,6 +72,9 @@ interface PlayerVisual {
   youLabel: Phaser.GameObjects.Text
   lastX: number
   lastY: number
+  /** 実際に画面に描画してる座標(サーバーからの座標へ滑らかに追従させる) */
+  renderX: number
+  renderY: number
   walkTime: number
   lastHoldingFingerprint: string
 }
@@ -356,6 +359,8 @@ export class MainScene extends Phaser.Scene {
           youLabel,
           lastX: p.x,
           lastY: p.y,
+          renderX: p.x,
+          renderY: p.y,
           walkTime: 0,
           lastHoldingFingerprint: '',
         }
@@ -363,9 +368,22 @@ export class MainScene extends Phaser.Scene {
       }
 
       const isMe = p.id === this.myId
+      // サーバーは20Hzでしか座標を送ってこないので、そのまま描画すると
+      // カクカク見える。毎フレーム、最新座標へ少しずつ近づけて滑らかにする
       const moved = Math.hypot(p.x - visual.lastX, p.y - visual.lastY) > 0.5
       visual.lastX = p.x
       visual.lastY = p.y
+      // 半減期80msで最新座標に近づける(1〜2tick分かけて追いつくので滑らかに見える)
+      const lerpT = 1 - Math.pow(0.5, deltaSeconds / 0.08)
+      visual.renderX = Phaser.Math.Linear(visual.renderX, p.x, lerpT)
+      visual.renderY = Phaser.Math.Linear(visual.renderY, p.y, lerpT)
+      // 補間後の距離が大きすぎる場合(接続直後や巻き戻り)はワープさせて追いつく
+      if (Math.hypot(p.x - visual.renderX, p.y - visual.renderY) > 80) {
+        visual.renderX = p.x
+        visual.renderY = p.y
+      }
+      const rx = visual.renderX
+      const ry = visual.renderY
 
       // 歩行アニメ: 動いてる間だけプルプルと上下+左右にスケールが揺れる
       if (moved) {
@@ -377,18 +395,18 @@ export class MainScene extends Phaser.Scene {
         visual.sprite.setScale(1, 1)
       }
 
-      visual.sprite.setPosition(p.x, p.y)
-      visual.meRing.setPosition(p.x, p.y)
+      visual.sprite.setPosition(rx, ry)
+      visual.meRing.setPosition(rx, ry)
       visual.meRing.setVisible(isMe)
 
       // 向き矢印: キャラの外周に、向いてる方向へ向けて表示
       const arrowOffset = heldItemOffset(p.facing, this.playerSize / 2 + 8)
-      visual.facingArrow.setPosition(p.x + arrowOffset.dx, p.y + arrowOffset.dy)
+      visual.facingArrow.setPosition(rx + arrowOffset.dx, ry + arrowOffset.dy)
       visual.facingArrow.setAngle(facingAngle(p.facing))
 
       const offset = heldItemOffset(p.facing, this.playerSize)
-      visual.heldItemBg.setPosition(p.x + offset.dx, p.y + offset.dy)
-      visual.heldItem.setPosition(p.x + offset.dx, p.y + offset.dy)
+      visual.heldItemBg.setPosition(rx + offset.dx, ry + offset.dy)
+      visual.heldItem.setPosition(rx + offset.dx, ry + offset.dy)
       const hasItem = p.holding !== null
       visual.heldItemBg.setVisible(hasItem)
       visual.heldItem.setVisible(hasItem)
@@ -405,7 +423,7 @@ export class MainScene extends Phaser.Scene {
         visual.lastHoldingFingerprint = ''
       }
 
-      visual.youLabel.setPosition(p.x, p.y - this.playerSize - 18)
+      visual.youLabel.setPosition(rx, ry - this.playerSize - 18)
       visual.youLabel.setVisible(isMe)
     }
 

@@ -138,6 +138,8 @@ export interface StationSnapshot {
   beltPosition?: number
   /** type: 'counter' の場合のみ。置かれている物(食材でも皿でも何でも) */
   counterItem?: HeldItem
+  /** type: 'plate_stack' の場合のみ。今すぐ取れる皿の枚数 */
+  plateCount?: number
 }
 
 /** サーバーから毎tick送られる状態のスナップショット全体 */
@@ -163,3 +165,6 @@ export const ORDER_SPAWN_INTERVAL = 10
 export const MAX_ORDERS = 4
 export const SCORE_PER_ORDER = 10
 export const TIMEOUT_PENALTY = 1
+// 皿置き場の在庫上限、提供後に戻ってくるまでの秒数
+export const MAX_PLATES = 4
+export const PLATE_RETURN_DELAY = 10

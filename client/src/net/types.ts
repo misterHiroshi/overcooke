@@ -108,6 +108,7 @@ export interface StationSnapshot {
   beltItem?: HeldItem
   beltPosition?: number
   counterItem?: HeldItem
+  plateCount?: number
 }
 
 export interface StateSnapshot {

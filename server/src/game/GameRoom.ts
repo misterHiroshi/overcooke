@@ -16,6 +16,8 @@ import {
   COOK_DURATION,
   BURN_DURATION,
   BELT_DURATION,
+  MAX_PLATES,
+  PLATE_RETURN_DELAY,
   GAME_DURATION,
   ORDER_TIME_LIMIT,
   ORDER_SPAWN_INTERVAL,
@@ -59,6 +61,9 @@ interface StationRuntime {
   beltPosition: number
   /** type: 'counter' のみ使用 */
   counterItem?: HeldItem
+  /** type: 'plate_stack' のみ使用: 今すぐ取れる皿の枚数と、返却待ちの残り秒数リスト */
+  plateCount?: number
+  pendingPlateReturns?: number[]
 }
 
 interface PlayerRuntime {
@@ -83,6 +88,8 @@ export class GameRoom {
     bounds: { x: def.x, y: def.y, width: def.width, height: def.height },
     progress: 0,
     beltPosition: 0,
+    plateCount: def.type === 'plate_stack' ? MAX_PLATES : undefined,
+    pendingPlateReturns: def.type === 'plate_stack' ? [] : undefined,
   }))
 
   private orders: Order[] = []
@@ -140,7 +147,7 @@ export class GameRoom {
         this.interactPrepStation(player, station, 'cook')
         break
       case 'plate_stack':
-        this.interactPlateStack(player)
+        this.interactPlateStack(player, station)
         break
       case 'serving':
         this.interactServing(player)
@@ -272,14 +279,18 @@ export class GameRoom {
     }
   }
 
-  private interactPlateStack(player: PlayerRuntime): void {
+  private interactPlateStack(player: PlayerRuntime, station: StationRuntime): void {
+    if (!station.plateCount || station.plateCount <= 0) return // 在庫切れ
+
     if (!player.holding) {
       player.holding = { kind: 'plate', items: [] }
+      station.plateCount -= 1
       return
     }
     // 下ごしらえ済みの単品を持っている → 皿に乗せ替える(単品持ち運びのショートカット)
     if (!isDish(player.holding) && player.holding.state !== 'raw') {
       player.holding = { kind: 'plate', items: [player.holding] }
+      station.plateCount -= 1
     }
   }
 
@@ -287,6 +298,10 @@ export class GameRoom {
     if (!player.holding || !isDish(player.holding)) return
     const dish = player.holding
     player.holding = null
+
+    // 提供した皿は(注文にマッチしてもしなくても)洗われてしばらくすると戻ってくる
+    const plateStack = this.stations.find((s) => s.def.type === 'plate_stack')
+    plateStack?.pendingPlateReturns?.push(PLATE_RETURN_DELAY)
 
     for (const recipe of RECIPES) {
       if (!dishMatchesRecipe(dish, recipe)) continue
@@ -296,7 +311,7 @@ export class GameRoom {
       this.score += SCORE_PER_ORDER
       return
     }
-    // どの注文にもマッチしなければ皿は無駄になる(スコアなし)
+    // どの注文にもマッチしなければ皿は無駄になる(スコアなし、ただし皿は戻ってくる)
   }
 
   private nearbyStation(player: PlayerRuntime): StationRuntime | undefined {
@@ -367,6 +382,18 @@ export class GameRoom {
       }
     }
 
+    // 皿置き場: 提供済みの皿が洗い上がって戻ってくるカウントダウン
+    for (const station of this.stations) {
+      if (station.def.type !== 'plate_stack' || !station.pendingPlateReturns) continue
+      station.pendingPlateReturns = station.pendingPlateReturns
+        .map((t) => t - seconds)
+        .filter((t) => {
+          if (t > 0) return true
+          station.plateCount = Math.min(MAX_PLATES, (station.plateCount ?? 0) + 1)
+          return false
+        })
+    }
+
     this.updateOrders(seconds)
 
     this.gameTimeLeft -= seconds
@@ -391,6 +418,10 @@ export class GameRoom {
       station.beltItem = undefined
       station.beltPosition = 0
       station.counterItem = undefined
+      if (station.def.type === 'plate_stack') {
+        station.plateCount = MAX_PLATES
+        station.pendingPlateReturns = []
+      }
     }
 
     let i = 0
@@ -475,6 +506,7 @@ export class GameRoom {
         beltItem: s.beltItem,
         beltPosition: s.beltPosition,
         counterItem: s.counterItem,
+        plateCount: s.plateCount,
       })),
       orders: this.orders,
       score: this.score,

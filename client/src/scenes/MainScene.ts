@@ -458,6 +458,11 @@ export class MainScene extends Phaser.Scene {
         continue
       }
 
+      if (visual.def.type === 'plate_stack') {
+        this.syncPlateStack(visual, stationState)
+        continue
+      }
+
       const item = stationState.itemOnStation
       if (!item) {
         visual.itemBg.setVisible(false)
@@ -511,6 +516,19 @@ export class MainScene extends Phaser.Scene {
     if (fingerprint !== visual.lastFingerprint) {
       popTween(this, visual.itemText)
       popTween(this, visual.itemBg)
+    }
+    visual.lastFingerprint = fingerprint
+  }
+
+  /** 皿置き場: 残り枚数を表示。0枚なら空っぽアイコンで在庫切れと分かるように */
+  private syncPlateStack(visual: StationVisual, stationState: StationSnapshot): void {
+    const count = stationState.plateCount ?? 0
+    visual.itemBg.setVisible(true)
+    visual.itemText.setText(count > 0 ? `🍽️×${count}` : '❌')
+
+    const fingerprint = String(count)
+    if (fingerprint !== visual.lastFingerprint) {
+      popTween(this, visual.itemText)
     }
     visual.lastFingerprint = fingerprint
   }

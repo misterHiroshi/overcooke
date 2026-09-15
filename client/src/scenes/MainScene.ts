@@ -64,6 +64,7 @@ interface StationVisual {
 }
 
 interface PlayerVisual {
+  shadow: Phaser.GameObjects.Ellipse
   sprite: Phaser.GameObjects.Sprite
   meRing: Phaser.GameObjects.Arc
   facingArrow: Phaser.GameObjects.Triangle
@@ -76,6 +77,8 @@ interface PlayerVisual {
   renderX: number
   renderY: number
   walkTime: number
+  /** 立ち止まってる時の「呼吸」揺れ用の時間 */
+  idleTime: number
   lastHoldingFingerprint: string
 }
 
@@ -187,27 +190,57 @@ export class MainScene extends Phaser.Scene {
     const key = `chef_${color}`
     if (this.textures.exists(key)) return key
 
-    const w = 30
-    const h = 36
+    const w = 34
+    const h = 40
     const g = this.add.graphics()
+    const cx = w / 2
 
-    // 体(角丸の四角)
+    // 腕(体の後ろに先に描く。左右2本、丸い手)
     g.fillStyle(color, 1)
-    g.fillRoundedRect(4, 15, w - 8, h - 17, 5)
+    g.fillCircle(4, 26, 3.4)
+    g.fillCircle(w - 4, 26, 3.4)
+    g.fillStyle(0xffe0b2, 1)
+    g.fillCircle(4, 30.5, 2.6)
+    g.fillCircle(w - 4, 30.5, 2.6)
+
+    // 体(角丸の四角、シャツ)
+    g.fillStyle(color, 1)
+    g.fillRoundedRect(6, 17, w - 12, h - 19, 6)
     // 首元の影
     g.fillStyle(0x000000, 0.15)
-    g.fillRect(4, 15, w - 8, 3)
+    g.fillRect(6, 17, w - 12, 3)
+
+    // エプロン(白、体の下半分に重ねる。胸当て+スカート部分)
+    g.fillStyle(0xfffdf5, 1)
+    g.fillRoundedRect(cx - 6, 20, 12, 8, 3)
+    g.fillRoundedRect(cx - 9, 26, 18, h - 28, 4)
+    g.fillStyle(0x000000, 0.06)
+    g.fillRoundedRect(cx - 9, 26, 18, 3, 2) // エプロンの折り目の影
+
     // 頭
     g.fillStyle(0xffe0b2, 1)
-    g.fillCircle(w / 2, 13, 10)
-    // シェフハット
+    g.fillCircle(cx, 13, 11)
+    // ほっぺ(赤み)
+    g.fillStyle(0xffb199, 0.55)
+    g.fillCircle(cx - 6.5, 15.5, 2)
+    g.fillCircle(cx + 6.5, 15.5, 2)
+
+    // シェフハット(丸くふくらんだ形)
     g.fillStyle(0xffffff, 1)
-    g.fillRoundedRect(w / 2 - 8, 0, 16, 9, 4)
-    g.fillRect(w / 2 - 10, 7, 20, 4)
+    g.fillCircle(cx, 3, 8)
+    g.fillRoundedRect(cx - 9, 3, 18, 8, 3)
+    g.fillRect(cx - 11, 9, 22, 4)
+
     // 目
     g.fillStyle(0x1a1a1a, 1)
-    g.fillCircle(w / 2 - 3.5, 13, 1.5)
-    g.fillCircle(w / 2 + 3.5, 13, 1.5)
+    g.fillCircle(cx - 3.8, 12.5, 1.6)
+    g.fillCircle(cx + 3.8, 12.5, 1.6)
+
+    // 口(にっこり、細い弧)
+    g.lineStyle(1.2, 0x8a5a3a, 1)
+    g.beginPath()
+    g.arc(cx, 16, 3, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
+    g.strokePath()
 
     g.generateTexture(key, w, h)
     g.destroy()
@@ -326,6 +359,8 @@ export class MainScene extends Phaser.Scene {
       let visual = this.playerVisuals.get(p.id)
       if (!visual) {
         const textureKey = this.ensureChefTexture(p.color)
+        // 影は先に描くことでキャラの下に敷かれるようにする
+        const shadow = this.add.ellipse(p.x, p.y + this.playerSize / 2 - 2, 22, 8, 0x000000, 0.25)
         const sprite = this.add.sprite(p.x, p.y, textureKey)
         const meRing = this.add
           .circle(p.x, p.y, this.playerSize / 2 + 5)
@@ -351,6 +386,7 @@ export class MainScene extends Phaser.Scene {
           .setOrigin(0.5)
           .setVisible(false)
         visual = {
+          shadow,
           sprite,
           meRing,
           facingArrow,
@@ -362,6 +398,7 @@ export class MainScene extends Phaser.Scene {
           renderX: p.x,
           renderY: p.y,
           walkTime: 0,
+          idleTime: 0,
           lastHoldingFingerprint: '',
         }
         this.playerVisuals.set(p.id, visual)
@@ -386,16 +423,21 @@ export class MainScene extends Phaser.Scene {
       const ry = visual.renderY
 
       // 歩行アニメ: 動いてる間だけプルプルと上下+左右にスケールが揺れる
+      // 止まってる間も、呼吸してるみたいにゆっくり微妙に伸縮させる(棒立ち感を無くす)
       if (moved) {
         visual.walkTime += deltaSeconds * 14
+        visual.idleTime = 0
         const wobble = Math.sin(visual.walkTime)
         visual.sprite.setScale(1 - wobble * 0.05, 1 + wobble * 0.05)
       } else {
         visual.walkTime = 0
-        visual.sprite.setScale(1, 1)
+        visual.idleTime += deltaSeconds * 2.2
+        const breathe = Math.sin(visual.idleTime) * 0.02
+        visual.sprite.setScale(1 - breathe, 1 + breathe)
       }
 
       visual.sprite.setPosition(rx, ry)
+      visual.shadow.setPosition(rx, ry + this.playerSize / 2 - 2)
       visual.meRing.setPosition(rx, ry)
       visual.meRing.setVisible(isMe)
 
@@ -430,6 +472,7 @@ export class MainScene extends Phaser.Scene {
     // 切断したプレイヤーの表示を消す
     for (const [id, visual] of this.playerVisuals) {
       if (!seenIds.has(id)) {
+        visual.shadow.destroy()
         visual.sprite.destroy()
         visual.meRing.destroy()
         visual.facingArrow.destroy()
